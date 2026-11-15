@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <title>San Nicolas, Ilocos Norte — Municipal Crop Suitability Web-GIS</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    body {
+      margin: 0;
+      font-family: 'Segoe UI', Arial, sans-serif;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+
+    header {
+      background: #1b4332;
+      color: #fff;
+      padding: 10px 18px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    header h1 {
+      font-size: 16px;
+      margin: 0;
+    }
+
+    header span {
+      font-size: 12px;
+      opacity: 0.85;
+    }
+
+    #toolbar {
+      background: #f1f5f9;
+      padding: 8px 18px;
+      border-bottom: 1px solid #cbd5e1;
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    select,
+    input,
+    button {
+      padding: 5px 8px;
+      border: 1px solid #94a3b8;
+      border-radius: 4px;
+      font-size: 13px;
+    }
+
+    button {
+      background: #2d6a4f;
+      color: white;
+      border: none;
+      cursor: pointer;
+    }
+
+    button:hover {
+      background: #1b4332;
+    }
+
+    #map {
+      flex: 1;
+      width: 100%;
+    }
+
+    .legend {
+      background: white;
+      padding: 10px 12px;
+      line-height: 1.6;
+      border-radius: 6px;
+      box-shadow: 0 1px 5px rgba(0, 0, 0, 0.3);
+      font-size: 12px;
+    }
+
+    .legend i {
+      width: 14px;
+      height: 14px;
+      float: left;
+      margin-right: 8px;
+      margin-top: 3px;
+      opacity: 0.85;
+    }
+
+    .popup-table {
+      border-collapse: collapse;
+      width: 100%;
+      font-size: 12px;
+      margin-top: 6px;
+    }
+
+    .popup-table td {
+      border: 1px solid #ddd;
+      padding: 4px 6px;
+    }
+
+    .popup-table td:first-child {
+      font-weight: bold;
+      background: #f8fafc;
+    }
+  </style>
+</head>
+
+<body>
+
+  <header>
+    <div>
+      <h1>Municipal Web-GIS Decision-Support Platform: Crop Suitability Assessment</h1>
+      <span>Municipality of San Nicolas, Ilocos Norte | QGIS Server + Leaflet Prototype</span>
+    </div>
+    <span>CRS: EPSG:32651 (WGS 84 / UTM Zone 51N)</span>
+  </header>
+
+  <div id="toolbar">
+    <label><strong>Active Crop Layer:</strong>
+      <select id="cropSelect" onchange="renderZones()">
+        <option value="rice">Irrigated / Lowland Rice</option>
+        <option value="corn">Yellow / White Corn</option>
+        <option value="garlic">Ilocos Garlic</option>
+        <option value="veg">High-Value Vegetables</option>
+      </select>
+    </label>
+
+    <label><strong>Search Barangay:</strong>
+      <select id="brgySearch" onchange="zoomToBrgy()">
+        <option value="">-- Select Barangay --</option>
+        <option value="18.1725,120.5945">Poblacion (Brgys. 1–15)</option>
+        <option value="18.1630,120.5850">Brgy. 16 San Marcos (Payas)</option>
+        <option value="18.1580,120.6020">Brgy. 17 Sta. Asuncion (Samac)</option>
+        <option value="18.1690,120.6120">Brgy. 18 San Pedro (Bingao)</option>
+        <option value="18.1780,120.6050">Brgy. 19 San Lorenzo</option>
+        <option value="18.1810,120.5820">Brgy. 20 San Pablo</option>
+        <option value="18.1540,120.5910">Brgy. 21 San Agustin (Bugnay)</option>
+        <option value="18.1610,120.6180">Brgy. 22 San Guillermo (Catuguing)</option>
+        <option value="18.1490,120.6080">Brgy. 23 Sta. Cecilia (Barabar)</option>
+        <option value="18.1760,120.5750">Brgy. 24 Sta. Monica (Nagrebcan)</option>
+      </select>
+    </label>
+    <span style="font-size:12px; color:#475569;"><em>Tip: Click any agricultural zone polygon to simulate WMS
+        GetFeatureInfo query.</em></span>
+  </div>
+
+  <div id="map"></div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    const map = L.map('map').setView([18.1665, 120.5980], 14);
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap contributors | LGU San Nicolas MAO'
+    }).addTo(map);
+
+    // Sample agricultural zones representing San Nicolas barangays
+    const zones = [
+      {
+        name: "Zone A — Brgy. 16 San Marcos (Payas) & Brgy. 21 San Agustin",
+        soil: "San Manuel Silt Loam", slope: "0.8%", elev: "14 m", rain: "1,940 mm/yr", landuse: "Irrigated Riceland",
+        scores: { rice: 3.72, corn: 3.10, garlic: 3.45, veg: 3.38 },
+        coords: [[18.166, 120.578], [18.166, 120.593], [18.152, 120.593], [18.152, 120.578]]
+      },
+      {
+        name: "Zone B — Brgy. 17 Sta. Asuncion (Samac) & Brgy. 23 Sta. Cecilia",
+        soil: "Umingan Clay Loam", slope: "1.5%", elev: "21 m", rain: "1,965 mm/yr", landuse: "Diversified Cropland",
+        scores: { rice: 3.40, corn: 3.55, garlic: 3.60, veg: 3.50 },
+        coords: [[18.162, 120.595], [18.162, 120.613], [18.146, 120.613], [18.146, 120.595]]
+      },
+      {
+        name: "Zone C — Brgy. 18 San Pedro (Bingao) & Brgy. 22 San Guillermo",
+        soil: "Bantay Clay Loam", slope: "6.4%", elev: "58 m", rain: "2,010 mm/yr", landuse: "Upland / Rainfed Cropland",
+        scores: { rice: 2.15, corn: 2.85, garlic: 2.30, veg: 2.65 },
+        coords: [[18.174, 120.608], [18.174, 120.626], [18.157, 120.626], [18.157, 120.608]]
+      },
+      {
+        name: "Zone D — Poblacion Core (Brgys. 1–15)",
+        soil: "Urban / Built-up", slope: "1.1%", elev: "16 m", rain: "1,935 mm/yr", landuse: "Built-up / Commercial",
+        scores: { rice: 0, corn: 0, garlic: 0, veg: 0 },
+        coords: [[18.178, 120.588], [18.178, 120.602], [18.167, 120.602], [18.167, 120.588]]
+      }
+    ];
+
+    function classify(score) {
+      if (score === 0) return { label: "Excluded (Built-up / Non-Agri)", color: "#64748b" };
+      if (score >= 3.25) return { label: "S1 — Highly Suitable", color: "#15803d" };
+      if (score >= 2.50) return { label: "S2 — Moderately Suitable", color: "#84cc16" };
+      if (score >= 1.75) return { label: "S3 — Marginally Suitable", color: "#facc15" };
+      return { label: "N — Not Suitable", color: "#dc2626" };
+    }
+
+    let layerGroup = L.layerGroup().addTo(map);
+
+    function renderZones() {
+      layerGroup.clearLayers();
+      const crop = document.getElementById("cropSelect").value;
+      zones.forEach(z => {
+        const si = z.scores[crop];
+        const cls = classify(si);
+        const poly = L.polygon(z.coords, {
+          color: "#1e293b", weight: 1.2, fillColor: cls.color, fillOpacity: 0.62
+        }).addTo(layerGroup);
+
+        poly.bindPopup(`
+        <strong>${z.name}</strong>
+        <table class="popup-table">
+          <tr><td>Suitability Class</td><td><strong>${cls.label}</strong></td></tr>
+          <tr><td>Composite Score (SI)</td><td>${si > 0 ? si.toFixed(2) + " / 4.00" : "N/A (Masked)"}</td></tr>
+          <tr><td>Soil Series (DA-BSWM)</td><td>${z.soil}</td></tr>
+          <tr><td>Slope / Elevation</td><td>${z.slope} / ${z.elev}</td></tr>
+          <tr><td>Annual Rainfall</td><td>${z.rain}</td></tr>
+          <tr><td>Existing Land Cover</td><td>${z.landuse}</td></tr>
+        </table>
+      `);
+      });
+    }
+
+    function zoomToBrgy() {
+      const val = document.getElementById("brgySearch").value;
+      if (!val) return;
+      const [lat, lng] = val.split(",").map(Number);
+      map.setView([lat, lng], 15);
+    }
+
+    const legend = L.control({ position: "bottomright" });
+    legend.onAdd = function () {
+      const div = L.DomUtil.create("div", "legend");
+      div.innerHTML = `
+      <strong>Suitability Legend</strong><br>
+      <i style="background:#15803d"></i> S1: Highly Suitable (≥ 3.25)<br>
+      <i style="background:#84cc16"></i> S2: Moderately Suitable (2.50–3.24)<br>
+      <i style="background:#facc15"></i> S3: Marginally Suitable (1.75–2.49)<br>
+      <i style="background:#dc2626"></i> N: Not Suitable (&lt; 1.75)<br>
+      <i style="background:#64748b"></i> Excluded (Built-up / Water / Forest)
+    `;
+      return div;
+    };
+    legend.addTo(map);
+
+    renderZones();
+  </script>
+</body>
+
+</html>
